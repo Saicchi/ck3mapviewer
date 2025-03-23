@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-US">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CK3 Map Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: darkslateblue;
+        }
+
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #realmname {
+            position: absolute;
+            bottom: 1vh;
+            left: 1vw;
+            width: fit-content;
+            background-color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <script type="application/javascript" src="./map.js"></script>
+    <div id="realmname">test</div>
+</body>
+
+</html>
