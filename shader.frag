@@ -26,15 +26,6 @@ void main()
     ivec2 iTexPos = ivec2(vTexPos * vec2(textureSize(uMapTex, 0)));
    
     vec4 baseColor = getTransColor(iTexPos);
-    vec4 borderColor = vec4(0, 0, 0, 1.0);
-    if ( baseColor * 255.0 == uColorSelected ) { borderColor = vec4(1.0, 0.8, 1.0, 1.0);};
-
-    for(int y = -1; y <= 1; y++) {
-        for(int x = -1; x <= 1; x++) {
-            vec4 offsetColor = getTransColor(iTexPos + ivec2( x, y));
-            if (offsetColor != baseColor) { pColor = borderColor; return; }
-        }
-    }
-
+    if ( baseColor * 255.0 == uColorSelected ) { baseColor *= vec4(vec3(0.5), 1); }
     pColor = baseColor;
 }
