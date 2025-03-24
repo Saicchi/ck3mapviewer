@@ -4,7 +4,9 @@ const gl = canvas.getContext("webgl2");
 
 const game = {
     provinces: {},
-    titles: []
+    titles: {},
+    faith: {},
+    culture: {}
 };
 
 const provinceMap = {
@@ -14,10 +16,10 @@ const provinceMap = {
     pixels: null,
     at(x, y) {
         const index = 4 * (y * this.width + x); // RGBA
-        return [this.pixels[index + 0], this.pixels[index + 1], this.pixels[index + 2]];
+        const color = [this.pixels[index + 0], this.pixels[index + 1], this.pixels[index + 2]];
+        return Object.values(game.provinces).find(e => e.equal(color)); // will always find a color
     }
 }
-
 
 const uniforms = {
     zoom: null,
@@ -185,24 +187,32 @@ const init_data = async () => {
 
         for (const province in data.provinces) {
             game.provinces[province] = {
+                name: province,
                 color: data.provinces[province],
-                title: false,
+                reference: null,
+                equal(color) { // color matches this province
+                    return (
+                        color[0] == this.color[0]
+                        && color[1] == this.color[1]
+                        && color[2] == this.color[2]
+                    );
+                },
                 update() {
-                    let [red, green, blue] = [0, 0, 0];
-                    if (this.title !== null) {
-                        [red, green, blue] = this.title ? this.title.color : this.color;
-                    }
+                    const displayColor = this.reference === null ? [0, 0, 0] : this.reference.color;
                     const coordX = this.color[0] + ((this.color[2] & 0b11110000) << 4);
                     const coordY = this.color[1] + ((this.color[2] & 0b00001111) << 8);
                     gl.texSubImage2D(gl.TEXTURE_2D, 0,
                         coordX, coordY, 1, 1, gl.RGB, gl.UNSIGNED_BYTE,
-                        new Uint8Array([red, green, blue]));
+                        new Uint8Array(displayColor));
                 }
             };
+            game.provinces[province].reference = game.provinces[province];
             game.provinces[province].update();
         }
 
         game.titles = data.titles;
+        game.faith = data.faith;
+        game.culture = data.culture;
         for (const [key, title] of Object.entries(game.titles)) {
             title.id = key;
             if (title.rank != "empire") {
@@ -210,6 +220,10 @@ const init_data = async () => {
             }
             if (title.rank != "barony") {
                 title.children = title.children.map(e => game.titles[e]);
+            }
+            if (title.rank == "county") {
+                title.faith = game.faith[title.faith];
+                title.culture = game.culture[title.culture];
             }
         }
 
@@ -257,16 +271,6 @@ const init_program = async () => {
     );
 }
 
-function title_from_color(color) {
-    for (const [key, value] of Object.entries(game.provinces)) {
-        if (value.color[0] == color[0] && value.color[1] == color[1] && value.color[2] == color[2]) {
-            if (value.title) { return [true, value.title]; }
-            return [false, key];
-        }
-    }
-    return [false, null];
-}
-
 window.onresize = e => {
     if (!init_status.ok) { return; }
 
@@ -312,13 +316,14 @@ canvas.onmousemove = e => {
 
     const posX = Math.floor((e.clientX - offX) / (scrZoom.zoom * scrZoom.minZoom));
     const posY = Math.floor((e.clientY - offY) / (scrZoom.zoom * scrZoom.minZoom));
-    const color = provinceMap.at(posX, posY);
 
-    const [isValid, title] = title_from_color([color[0], color[1], color[2]]);
-    document.getElementById("realmname").innerText = isValid ? title.id : title;
+    const province = provinceMap.at(posX, posY);
+    const selectedName = province.reference === null ? province.name : province.reference.name;
+    const selectedColor = province.reference === null ? province.color : province.reference.color;
 
-    const borderColor = isValid ? title.color : game.provinces[title].color;
-    gl.uniform4f(uniforms.colorSelected, borderColor[0], borderColor[1], borderColor[2], 255);
+    document.getElementById("realmname").innerText = selectedName;
+
+    gl.uniform4f(uniforms.colorSelected, selectedColor[0], selectedColor[1], selectedColor[2], 255);
 
     if (!scrOff.dragging) { draw(); return; }
 
@@ -335,15 +340,11 @@ canvas.onmousemove = e => {
 function barony() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
-    for (const province in game.provinces) {
-        game.provinces[province].title = null;
-        game.provinces[province].update();
-    }
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
 
     for (const barony of Object.values(game.titles).filter(title => title.rank == "barony")) {
-        if (!(barony.province in game.provinces)) { continue; }
         const province = game.provinces[barony.province];
-        province.title = barony;
+        province.reference = barony;
         province.update();
     }
 
@@ -353,17 +354,12 @@ function barony() {
 function county() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
-
-    for (const province in game.provinces) {
-        game.provinces[province].title = null;
-        game.provinces[province].update();
-    }
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
 
     for (const county of Object.values(game.titles).filter(title => title.rank == "county")) {
         for (const barony of county.children) {
-            if (!(barony.province in game.provinces)) { continue; }
             const province = game.provinces[barony.province];
-            province.title = county;
+            province.reference = county;
             province.update();
         }
     }
@@ -375,17 +371,13 @@ function duchy() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
 
-    for (const province in game.provinces) {
-        game.provinces[province].title = null;
-        game.provinces[province].update();
-    }
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
 
     for (const duchy of Object.values(game.titles).filter(title => title.rank == "duchy")) {
         for (const county of duchy.children) {
             for (const barony of county.children) {
-                if (!(barony.province in game.provinces)) { continue; }
                 const province = game.provinces[barony.province];
-                province.title = duchy;
+                province.reference = duchy;
                 province.update();
             }
         }
@@ -398,18 +390,14 @@ function kingdom() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
 
-    for (const province in game.provinces) {
-        game.provinces[province].title = null;
-        game.provinces[province].update();
-    }
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
 
     for (const kingdom of Object.values(game.titles).filter(title => title.rank == "kingdom")) {
         for (const duchy of kingdom.children) {
             for (const county of duchy.children) {
                 for (const barony of county.children) {
-                    if (!(barony.province in game.provinces)) { continue; }
                     const province = game.provinces[barony.province];
-                    province.title = kingdom;
+                    province.reference = kingdom;
                     province.update();
                 }
             }
@@ -422,20 +410,15 @@ function kingdom() {
 function empire() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
-
-    for (const province in game.provinces) {
-        game.provinces[province].title = null;
-        game.provinces[province].update();
-    }
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
 
     for (const empire of Object.values(game.titles).filter(title => title.rank == "empire")) {
         for (const kingdom of empire.children) {
             for (const duchy of kingdom.children) {
                 for (const county of duchy.children) {
                     for (const barony of county.children) {
-                        if (!(barony.province in game.provinces)) { continue; }
                         const province = game.provinces[barony.province];
-                        province.title = empire;
+                        province.reference = empire;
                         province.update();
                     }
                 }
@@ -446,6 +429,37 @@ function empire() {
     draw();
 }
 
+function faith() {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
+
+    for (const county of Object.values(game.titles).filter(title => title.rank == "county")) {
+        for (const barony of county.children) {
+            const province = game.provinces[barony.province];
+            province.reference = county.faith;
+            province.update();
+        }
+    }
+
+    draw();
+}
+
+function culture() {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
+
+    for (const county of Object.values(game.titles).filter(title => title.rank == "county")) {
+        for (const barony of county.children) {
+            const province = game.provinces[barony.province];
+            province.reference = county.culture;
+            province.update();
+        }
+    }
+
+    draw();
+}
 
 
 init_canvas();
