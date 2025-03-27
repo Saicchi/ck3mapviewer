@@ -461,6 +461,26 @@ function culture() {
     draw();
 }
 
+function development() {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
+    for (const province of Object.values(game.provinces)) { province.reference = null; province.update(); }
+
+    for (const county of Object.values(game.titles).filter(title => title.rank == "county")) {
+        const devcolor = [
+            255, 100 - county.development * 5, 100 + county.development * 5
+        ];
+
+        for (const barony of county.children) {
+            const province = game.provinces[barony.province];
+            province.reference = { "name": county.development, "color": devcolor };
+            province.update();
+        }
+    }
+
+    draw();
+}
+
 
 init_canvas();
 init_data();
