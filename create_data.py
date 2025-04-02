@@ -120,9 +120,56 @@ def map_extra_special() -> dict:
 EXTRA_SPECIAL_MAPPING = map_extra_special()
 
 
-def load_provinces() -> list[list[int, int, int, int]]:
-    provinces = []  # Some of these are rivers or sea
-    with open("definition.csv", "r") as f:
+def load_provinces() -> list[dict]:
+    provinces = {}
+    map_path = BASEPATH.joinpath("map_data/default.map")
+    with map_path.open("r") as f:
+        for line in f.readlines():
+            linesplit = line.split(" ")
+            if linesplit[0] not in (
+                "sea_zones",
+                "river_provinces",
+                "lakes",
+                "impassable_mountains",
+                "impassable_seas",
+            ):
+                continue
+            values = [
+                int(x)
+                for x in line[line.index("{") + 1 : line.index("}")].strip().split()
+            ]
+
+            # last defined wins
+            if linesplit[2] == "RANGE":
+                for i in range(values[0], values[1] + 1):
+                    provinces[i] = linesplit[0]
+            elif linesplit[2] == "LIST":
+                for provid in values:
+                    provinces[provid] = linesplit[0]
+            else:
+                raise Exception("Unxpected Value")
+
+    prov_terrain_path = BASEPATH.joinpath(
+        "common/province_terrain/00_province_terrain.txt"
+    )
+    with prov_terrain_path.open("r", encoding="utf-8-sig") as f:
+        for line in f.readlines():
+            if not line.strip() or line[0] == "#":
+                continue
+            content = re.match(r"(\w+)=(\w+)", line)
+            provid, value = (content[1], content[2])
+            try:
+                provid = int(provid)
+            except ValueError:
+                continue
+            if provid in provinces:
+                continue  # default.map has prority
+            provinces[provid] = value
+
+    definitions = []  # Some of these are rivers or sea
+
+    definitions_path = BASEPATH.joinpath("map_data/definition.csv")
+    with definitions_path.open("r") as f:
         reader = csv.reader(f, delimiter=";")
         next(reader)  # Skip Header
 
@@ -131,8 +178,15 @@ def load_provinces() -> list[list[int, int, int, int]]:
                 continue
             if row[4] == "":  # No name can be ignored
                 continue
-            provinces.append([int(x) for x in row[:4]])  # id, red, green, blue
-    return provinces
+            provid = int(row[0])
+            definitions.append(
+                {
+                    "id": provid,
+                    "color": [int(x) for x in row[1:4]],
+                    "terrain": provinces[provid] if provid in provinces else "plains",
+                }
+            )  # id, red, green, blue
+    return definitions
 
 
 class Title:
@@ -160,6 +214,8 @@ class Title:
         self.title_history: list[CWHistoryDate] = []
         self.culture: list[tuple[CWHistoryDate, CWCulture]] = []
         self.faith: list[tuple[CWHistoryDate, CWFaith]] = []
+        self.terrain: str = None
+        self.holding: list[tuple[CWHistoryDate, str]] = []
         self.special: list[tuple[CWHistoryDate, str]] = []
         self.special_slot: list[tuple[CWHistoryDate, str]] = []
         self.province_history: list[CWHistoryDate] = []
@@ -196,6 +252,7 @@ class Title:
             title.altnames_date.append((stubdate, None))
             title.culture.append((stubdate, None))
             title.faith.append((stubdate, None))
+            title.holding.append((stubdate, None))
             title.special.append((stubdate, None))
             title.special_slot.append((stubdate, None))
             title.capital.append((stubdate, cwtitle.capital))
@@ -406,6 +463,15 @@ class Title:
                 else:
                     title.faith.append(title.faith[-1])
 
+                # Holding
+                comparision_date = compare_history(
+                    "holding", title, title.holding[-1][0], starting_date, True
+                )
+                if comparision_date.holding is not None:
+                    title.holding.append((comparision_date, comparision_date.holding))
+                else:
+                    title.holding.append(title.holding[-1])
+
                 # Special Building
                 comparision_date = compare_history(
                     "special_building", title, title.special[-1][0], starting_date, True
@@ -460,9 +526,38 @@ class Title:
 Title.initialize()
 Title.after_initialize()
 
-data = {"provinces": {}, "titles": {}, "faith": {}, "culture": {}}
+# colors from the wiki
+terrain_mapping = [
+    ["desert", CWLoc["desert"].value, 240, 240, 8],
+    ["desert_mountains", CWLoc["desert_mountains"].value, 84, 84, 37],
+    ["drylands", CWLoc["drylands"].value, 255, 20, 175],
+    ["farmlands", CWLoc["farmlands"].value, 0, 255, 0],
+    ["floodplains", CWLoc["floodplains"].value, 0, 0, 255],
+    ["forest", CWLoc["forest"].value, 0, 128, 0],
+    ["hills", CWLoc["hills"].value, 128, 0, 0],
+    ["jungle", CWLoc["jungle"].value, 0, 100, 0],
+    ["mountains", CWLoc["mountains"].value, 128, 128, 128],
+    ["oasis", CWLoc["oasis"].value, 30, 144, 255],
+    ["plains", CWLoc["plains"].value, 233, 150, 122],
+    ["steppe", CWLoc["steppe"].value, 144, 128, 0],
+    ["taiga", CWLoc["taiga"].value, 143, 188, 143],
+    ["wetlands", CWLoc["wetlands"].value, 0, 191, 255],
+    ["river_provinces", "River", 0, 125, 255],
+    ["sea_zones", "Sea", 14, 78, 199],
+    ["impassable_mountains", "Impassable Mountains", 0, 0, 0],
+    ["lakes", "Lake", 0, 196, 255],
+    ["impassable_seas", "Sea", 0, 0, 50],
+]
+
+data = {
+    "provinces": {},
+    "titles": {},
+    "faith": {},
+    "culture": {},
+    "terrain": terrain_mapping,
+}
 for province in load_provinces():
-    data["provinces"][province[0]] = province[1:]
+    data["provinces"][province["id"]] = [province["terrain"], *province["color"]]
 
 data_titles = list(
     (

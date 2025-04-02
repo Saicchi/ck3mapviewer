@@ -23,13 +23,77 @@
             width: fit-content;
             background-color: white;
         }
+
+        #infobox {
+            position: absolute;
+            bottom: 0.3vh;
+            left: 0.3vw;
+            width: 300px;
+            height: fit-content;
+            font-size: larger;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        #provinceinfo {
+            padding: 2px;
+            margin-top: 10px;
+            background-color: beige;
+
+            #provinceterrain {
+                font-size: small;
+            }
+        }
+
+        #baronyinfo {
+            background-color: aliceblue;
+        }
+
+
+
+        .baronyproperty {
+            margin-top: 2px;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
 </head>
 
 <body>
     <canvas id="canvas"></canvas>
     <script type="application/javascript" src="./map.js"></script>
-    <div id="realmname">test</div>
+    <div id="infobox">
+        <div id="provinceinfo">
+            <div id="provincename">Chiefdom of Mogadishu</div>
+            <div id="provinceterrain">Desert</div>
+        </div>
+
+        <div id="baronyinfo">
+            <div class="baronyproperty">
+                <div>Holding:</div>
+                <div id="baronyholding">Tribe 2</div>
+            </div>
+            <div class="baronyproperty">
+                <div>Development:</div>
+                <div id="baronydevelopment">39</div>
+            </div>
+            <div class="baronyproperty">
+                <div>Faith:</div>
+                <div id="baronyfaith">Waaqism</div>
+            </div>
+            <div class="baronyproperty">
+                <div>Culture:</div>
+                <div id="baronyculture">Somali</div>
+            </div>
+            <div class="baronyproperty">
+                <div>Special:</div>
+                <div id="baronyspecial">Silver Mine 2</div>
+            </div>
+        </div>
+
+        <div id="titleinfo"></div>
+    </div>
+    <div id="realmname"></div>
 </body>
 
 </html>

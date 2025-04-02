@@ -6,7 +6,8 @@ const game = {
     provinces: {},
     titles: {},
     faith: {},
-    culture: {}
+    culture: {},
+    terrain: {}
 };
 
 const provinceMap = {
@@ -27,6 +28,42 @@ const uniforms = {
     transTexture: null,
     colorSelected: null,
 }
+
+
+const update_province_info = (province) => {
+    const provinceName = document.getElementById("provincename");
+    const provinceTerrain = document.getElementById("provinceterrain");
+
+    const baronyHolding = document.getElementById("baronyholding");
+    const baronyDevelopment = document.getElementById("baronydevelopment");
+    const baronyFaith = document.getElementById("baronyfaith");
+    const baronyCulture = document.getElementById("baronyculture");
+    const baronySpecial = document.getElementById("baronyspecial");
+
+    const title = province.reference;
+    if (title === null || title === province || title === province.terrain) {
+        provinceName.innerHTML = province.name;
+        provinceTerrain.innerHTML = province.terrain.name;
+    } else if (title.rank == "barony") {
+        provinceName.innerHTML = title.name;
+        provinceTerrain.innerHTML = "TERRAIN";
+
+        baronyHolding.innerHTML = "HOLDING";
+        baronyDevelopment.innerHTML = title.parent.development;
+        baronyFaith.innerHTML = title.parent.faith.name;
+        baronyCulture.innerHTML = title.parent.culture.name;
+        baronySpecial.innerHTML = "SPECIAL";
+    } else if (title.rank == "county") {
+        provinceName.innerHTML = title.name;
+        provinceTerrain.innerHTML = province.terrain.name;
+
+        baronyHolding.innerHTML = "HOLDING";
+        baronyDevelopment.innerHTML = title.development;
+        baronyFaith.innerHTML = title.faith.name;
+        baronyCulture.innerHTML = title.culture.name;
+        baronySpecial.innerHTML = "SPECIAL";
+    }
+};
 
 async function create_program(urlVertex, urlFragment) {
     const create_shader = (type, source) => {
@@ -108,9 +145,11 @@ const init_status = {
         if (!(this.canvas && this.map && this.data && this.program)) { return; }
         this.ok = true;
 
-        //counties();
+
 
         draw();
+        terrain();
+        //county();
 
         return;
     }
@@ -185,10 +224,19 @@ const init_data = async () => {
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
 
+        for (const [id, name, red, green, blue] of data.terrain) {
+            game.terrain[id] = {
+                "id": id,
+                "name": name,
+                "color": [red, green, blue]
+            }
+        }
+
         for (const province in data.provinces) {
             game.provinces[province] = {
                 name: province,
-                color: data.provinces[province],
+                terrain: game.terrain[data.provinces[province][0]],
+                color: data.provinces[province].slice(1),
                 reference: null,
                 equal(color) { // color matches this province
                     return (
@@ -317,13 +365,13 @@ canvas.onmousemove = e => {
     const posX = Math.floor((e.clientX - offX) / (scrZoom.zoom * scrZoom.minZoom));
     const posY = Math.floor((e.clientY - offY) / (scrZoom.zoom * scrZoom.minZoom));
 
-    const province = provinceMap.at(posX, posY);
-    const selectedName = province.reference === null ? province.name : province.reference.name;
-    const selectedColor = province.reference === null ? province.color : province.reference.color;
-
-    document.getElementById("realmname").innerText = selectedName;
-
-    gl.uniform4f(uniforms.colorSelected, selectedColor[0], selectedColor[1], selectedColor[2], 255);
+    gl.uniform4f(uniforms.colorSelected, 0, 0, 0, 0);
+    if (posX >= 0 && posX < provinceMap.width && posY >= 0 && posY < provinceMap.height) {
+        const province = provinceMap.at(posX, posY);
+        const selectedColor = province.reference === null ? province.color : province.reference.color;
+        gl.uniform4f(uniforms.colorSelected, selectedColor[0], selectedColor[1], selectedColor[2], 255);
+        update_province_info(province);
+    }
 
     if (!scrOff.dragging) { draw(); return; }
 
@@ -476,6 +524,16 @@ function development() {
             province.reference = { "name": county.development, "color": devcolor };
             province.update();
         }
+    }
+
+    draw();
+}
+
+function terrain() {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, uniforms.transTexture);
+    for (const province of Object.values(game.provinces)) {
+        province.reference = province.terrain; province.update();
     }
 
     draw();
